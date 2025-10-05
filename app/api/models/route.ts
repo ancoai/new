@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getModelStore } from "@/lib/model-store";
 import { getDatabase } from "@/lib/database";
 import { fetchAvailableModels } from "@/server/platform";
+import { getSessionUser } from "@/lib/auth";
 import { getModelStore } from "@/lib/model-store";
 import { getDatabase } from "@/lib/database";
 import { z } from "zod";
@@ -14,6 +15,24 @@ const addModelSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const searchParams = request.nextUrl.searchParams;
+  const refresh = searchParams.get("refresh") === "1";
+  const baseUrl = searchParams.get("baseUrl") ?? undefined;
+  const db = await getDatabase();
+  const settings = db.getUserSettings(user.id);
+
+  if (refresh) {
+    if (!settings.apiKey) {
+      return Response.json({ error: "Missing API key" }, { status: 400 });
+    }
+    const models = await fetchAvailableModels({
+      baseUrl: baseUrl ?? settings.baseUrl ?? undefined,
+      apiKey: settings.apiKey,
+    });
   const searchParams = request.nextUrl.searchParams;
   const refresh = searchParams.get("refresh") === "1";
   const baseUrl = searchParams.get("baseUrl") ?? undefined;
@@ -34,6 +53,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const json = await request.json();
   const body = addModelSchema.parse(json);
   const db = await getDatabase();

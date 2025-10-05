@@ -17,6 +17,7 @@
       "@/*": ["./*"],
       "@server/*": ["./server/*"]
     },
+    "types": ["node", "vitest/globals"]
     "types": ["node"]
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.cjs", "**/*.mjs"],

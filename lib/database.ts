@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
+import { decryptSecret, encryptSecret, hashPassword } from "@/lib/security";
 import type {
   WorkspaceConversation,
   WorkspaceMessage,
@@ -20,6 +21,33 @@ type ConversationRow = {
   created_at: string;
   updated_at: string;
   model_label: string | null;
+};
+
+type UserRow = {
+  id: string;
+  username: string;
+  password_hash: string;
+  role: string;
+};
+
+type SessionRow = {
+  id: string;
+  user_id: string;
+  token: string;
+  created_at: string;
+  expires_at: string;
+};
+
+type UserSettingsRow = {
+  id: string;
+  user_id: string;
+  base_url: string | null;
+  api_key_cipher: string | null;
+  api_key_iv: string | null;
+  api_key_tag: string | null;
+  model: string | null;
+  thinking_prompt: string | null;
+  updated_at: string;
 };
 
 type MessageRow = {
@@ -87,6 +115,39 @@ function bootstrap(db: Database.Database) {
       created_at TEXT NOT NULL,
       message_id TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      base_url TEXT,
+      api_key_cipher TEXT,
+      api_key_iv TEXT,
+      api_key_tag TEXT,
+      model TEXT,
+      thinking_prompt TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
+  seedAdminUser(db);
   `);
 }
 
@@ -94,6 +155,7 @@ function migrate(db: Database.Database) {
   ensureColumn(db, "messages", "metadata", "TEXT");
   ensureColumn(db, "thinking_runs", "system_prompt", "TEXT");
   ensureColumn(db, "thinking_runs", "message_id", "TEXT");
+  ensureColumn(db, "user_settings", "api_key_tag", "TEXT");
 }
 
 function ensureColumn(db: Database.Database, table: string, column: string, definition: string) {
@@ -141,6 +203,27 @@ function mapThinkingRunRow(row: ThinkingRunRow): WorkspaceThinkingRun {
   };
 }
 
+function seedAdminUser(db: Database.Database) {
+  const existing = db
+    .prepare(`SELECT id FROM users WHERE username = @username LIMIT 1`)
+    .get({ username: "admin" }) as { id: string } | undefined;
+  if (!existing) {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const passwordHash = hashPassword("12345678");
+    db.prepare(
+      `INSERT INTO users (id, username, password_hash, role, created_at)
+       VALUES (@id, @username, @password_hash, @role, @created_at)`,
+    ).run({
+      id,
+      username: "admin",
+      password_hash: passwordHash,
+      role: "admin",
+      created_at: now,
+    });
+  }
+}
+
 export async function getDatabase() {
   const db = ensureClient();
 
@@ -168,6 +251,34 @@ export async function getDatabase() {
       updated_at: isoDate,
       conversation_id: conversationId,
     });
+  }
+
+  function getUserRowByUsername(username: string): UserRow | null {
+    const row = db
+      .prepare(`SELECT id, username, password_hash, role FROM users WHERE username = @username LIMIT 1`)
+      .get({ username }) as UserRow | undefined;
+    return row ?? null;
+  }
+
+  function getUserRowById(userId: string): UserRow | null {
+    const row = db
+      .prepare(`SELECT id, username, password_hash, role FROM users WHERE id = @userId LIMIT 1`)
+      .get({ userId }) as UserRow | undefined;
+    return row ?? null;
+  }
+
+  function getSettingsRow(userId: string): UserSettingsRow | null {
+    const row = db
+      .prepare(
+        `SELECT id, user_id, base_url, api_key_cipher, api_key_iv, api_key_tag, model, thinking_prompt, updated_at
+         FROM user_settings WHERE user_id = @userId LIMIT 1`,
+      )
+      .get({ userId }) as UserSettingsRow | undefined;
+    return row ?? null;
+  }
+
+  function purgeExpiredSessions() {
+    db.prepare(`DELETE FROM sessions WHERE datetime(expires_at) <= datetime('now')`).run();
   }
 
   return {
@@ -358,6 +469,142 @@ export async function getDatabase() {
       db.prepare(
         `DELETE FROM thinking_runs WHERE conversation_id = @conversationId AND created_at >= @createdAt`,
       ).run({ conversationId, createdAt });
+    },
+    getUserByUsername(username: string) {
+      return getUserRowByUsername(username);
+    },
+    getUserById(userId: string) {
+      return getUserRowById(userId);
+    },
+    createSession(userId: string, expiresAt: Date) {
+      purgeExpiredSessions();
+      const token = randomUUID();
+      db.prepare(
+        `INSERT INTO sessions (id, user_id, token, created_at, expires_at)
+         VALUES (@id, @user_id, @token, @created_at, @expires_at)`,
+      ).run({
+        id: randomUUID(),
+        user_id: userId,
+        token,
+        created_at: new Date().toISOString(),
+        expires_at: expiresAt.toISOString(),
+      });
+      return token;
+    },
+    getSession(token: string) {
+      purgeExpiredSessions();
+      const row = db
+        .prepare(
+          `SELECT id, user_id, token, created_at, expires_at FROM sessions WHERE token = @token LIMIT 1`,
+        )
+        .get({ token }) as SessionRow | undefined;
+      if (!row) {
+        return null;
+      }
+      if (new Date(row.expires_at).getTime() <= Date.now()) {
+        db.prepare(`DELETE FROM sessions WHERE id = @id`).run({ id: row.id });
+        return null;
+      }
+      return row;
+    },
+    deleteSession(token: string) {
+      db.prepare(`DELETE FROM sessions WHERE token = @token`).run({ token });
+    },
+    getUserSettings(userId: string) {
+      const row = getSettingsRow(userId);
+      if (!row) {
+        return {
+          userId,
+          baseUrl: null,
+          apiKey: null,
+          model: null,
+          thinkingPrompt: null,
+          updatedAt: null,
+        };
+      }
+      return {
+        userId,
+        baseUrl: row.base_url,
+        apiKey: decryptSecret({
+          cipherText: row.api_key_cipher,
+          iv: row.api_key_iv,
+          authTag: row.api_key_tag,
+        }),
+        model: row.model,
+        thinkingPrompt: row.thinking_prompt,
+        updatedAt: row.updated_at,
+      };
+    },
+    setUserSettings(userId: string, payload: {
+      baseUrl?: string | null;
+      apiKey?: string | null;
+      model?: string | null;
+      thinkingPrompt?: string | null;
+    }) {
+      const existing = getSettingsRow(userId);
+      const baseUrl =
+        payload.baseUrl !== undefined ? payload.baseUrl : existing?.base_url ?? null;
+      const model = payload.model !== undefined ? payload.model : existing?.model ?? null;
+      const thinkingPrompt =
+        payload.thinkingPrompt !== undefined
+          ? payload.thinkingPrompt
+          : existing?.thinking_prompt ?? null;
+
+      let apiKeyCipher = existing?.api_key_cipher ?? null;
+      let apiKeyIv = existing?.api_key_iv ?? null;
+      let apiKeyTag = existing?.api_key_tag ?? null;
+
+      if (payload.apiKey === null) {
+        apiKeyCipher = null;
+        apiKeyIv = null;
+        apiKeyTag = null;
+      } else if (typeof payload.apiKey === "string") {
+        const encrypted = encryptSecret(payload.apiKey);
+        apiKeyCipher = encrypted.cipherText;
+        apiKeyIv = encrypted.iv;
+        apiKeyTag = encrypted.authTag;
+      }
+
+      const now = new Date().toISOString();
+
+      if (existing) {
+        db.prepare(
+          `UPDATE user_settings
+           SET base_url = @base_url,
+               api_key_cipher = @api_key_cipher,
+               api_key_iv = @api_key_iv,
+               api_key_tag = @api_key_tag,
+               model = @model,
+               thinking_prompt = @thinking_prompt,
+               updated_at = @updated_at
+           WHERE id = @id`,
+        ).run({
+          id: existing.id,
+          base_url: baseUrl,
+          api_key_cipher: apiKeyCipher,
+          api_key_iv: apiKeyIv,
+          api_key_tag: apiKeyTag,
+          model,
+          thinking_prompt: thinkingPrompt,
+          updated_at: now,
+        });
+        return;
+      }
+
+      db.prepare(
+        `INSERT INTO user_settings (id, user_id, base_url, api_key_cipher, api_key_iv, api_key_tag, model, thinking_prompt, updated_at)
+         VALUES (@id, @user_id, @base_url, @api_key_cipher, @api_key_iv, @api_key_tag, @model, @thinking_prompt, @updated_at)`,
+      ).run({
+        id: randomUUID(),
+        user_id: userId,
+        base_url: baseUrl,
+        api_key_cipher: apiKeyCipher,
+        api_key_iv: apiKeyIv,
+        api_key_tag: apiKeyTag,
+        model,
+        thinking_prompt: thinkingPrompt,
+        updated_at: now,
+      });
     },
   };
 

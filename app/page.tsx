@@ -22,6 +22,11 @@ export default function HomePage() {
           </li>
         </ol>
         <p className="mt-4 text-sm text-muted-foreground">
+          Sign in on the
+          <Link className="mx-1 text-blue-600 underline" href="/login">
+            login page
+          </Link>
+          and then open the
           Head directly to the
           <Link className="ml-1 text-blue-600 underline" href="/workspace">
             chat workspace

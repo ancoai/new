@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { fetchChatCompletion } from "@/server/platform";
+import { getSessionUser } from "@/lib/auth";
+import { getDatabase } from "@/lib/database";
 
 const requestSchema = z.object({
   image: z.string().min(1),
@@ -14,6 +16,17 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const json = await request.json();
+  const body = requestSchema.parse(json);
+  const db = await getDatabase();
+  const settings = db.getUserSettings(user.id);
+  if (!settings.apiKey) {
+    return Response.json({ error: "Missing API key" }, { status: 400 });
+  }
   const json = await request.json();
   const body = requestSchema.parse(json);
 
@@ -24,6 +37,8 @@ export async function POST(request: NextRequest) {
       : "Generate a concise, human-friendly caption for the attached image.";
 
   const content = await fetchChatCompletion({
+    baseUrl: body.settings.baseUrl ?? settings.baseUrl ?? undefined,
+    apiKey: settings.apiKey,
     baseUrl: body.settings.baseUrl,
     apiKey: body.settings.apiKey,
     model: body.settings.model,

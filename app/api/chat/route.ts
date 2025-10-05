@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { orchestrateChat, type ChatMessageContent } from "@/server/orchestrator";
 import { getDatabase } from "@/lib/database";
+import { getSessionUser } from "@/lib/auth";
 
 const textContentSchema = z.object({
   type: z.literal("text"),
@@ -47,6 +48,26 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  const user = await getSessionUser();
+  if (!user) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const json = await request.json();
+  const body = requestSchema.parse(json);
+  const db = await getDatabase();
+  const userSettings = db.getUserSettings(user.id);
+  if (!userSettings.apiKey) {
+    return Response.json({ error: "Missing API key" }, { status: 400 });
+  }
+
+  const payload = {
+    ...body,
+    settings: {
+      ...body.settings,
+      baseUrl: body.settings.baseUrl ?? userSettings.baseUrl ?? undefined,
+      apiKey: userSettings.apiKey,
+    },
+  };
   const json = await request.json();
   const body = requestSchema.parse(json);
   const encoder = new TextEncoder();
@@ -66,6 +87,7 @@ export async function POST(request: NextRequest) {
 
       try {
         send("status", { stage: "starting" });
+        const result = await orchestrateChat(payload, {
         const result = await orchestrateChat(body, {
           onThinkingToken: (token) => {
             if (token.trim().length > 0) {

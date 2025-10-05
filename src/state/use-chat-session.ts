@@ -200,6 +200,8 @@ function flushBuffer(buffer: string, onEvent: (event: string, data: unknown) => 
   return buffer;
 }
 
+export const __testables = { readEventStream, flushBuffer };
+
 function processClientEventChunk(chunk: string, onEvent: (event: string, data: unknown) => void) {
   if (!chunk.trim()) return;
   const lines = chunk.split("\n");

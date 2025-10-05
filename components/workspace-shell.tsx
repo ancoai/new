@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConversationList } from "@/components/workspace/sidebar";
 import { ChatComposer, type ComposerConfig, type ComposerSubmitPayload } from "@/components/workspace/composer";
@@ -21,6 +22,9 @@ const WORKSPACE_QUERY_KEY = ["workspace"] as const;
 async function fetchWorkspaceData(): Promise<InitialWorkspaceData> {
   const response = await fetch("/api/workspace", { cache: "no-store" });
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
     throw new Error("Failed to load workspace");
   }
   return (await response.json()) as InitialWorkspaceData;
@@ -31,6 +35,7 @@ export function WorkspaceShell({
 }: {
   initialData: InitialWorkspaceData;
 }) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const workspaceQuery = useQuery({
     queryKey: WORKSPACE_QUERY_KEY,
@@ -200,6 +205,7 @@ export function WorkspaceShell({
 
   const refreshModelsMutation = useMutation({
     mutationFn: async () => {
+      if (!settings.apiKeySet) {
       if (!settings.apiKey) {
         throw new Error("API key required to sync models");
       }
@@ -219,6 +225,7 @@ export function WorkspaceShell({
 
   const captionImageMutation = useMutation({
     mutationFn: async (file: File) => {
+      if (!settings.apiKeySet) {
       if (!settings.apiKey) {
         throw new Error("API key required for image captioning");
       }
@@ -371,10 +378,43 @@ export function WorkspaceShell({
   const handleSettingsSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
+      const submission: ClientSettings = {};
+      const draftBaseUrl = settingsDraft.baseUrl ?? "";
+      const currentBaseUrl = settings.baseUrl ?? "";
+      if (draftBaseUrl.trim() !== currentBaseUrl.trim()) {
+        submission.baseUrl = draftBaseUrl.trim() ? draftBaseUrl.trim() : "";
+      }
+      const draftModel = settingsDraft.model ?? "";
+      const currentModel = settings.model ?? "";
+      if (draftModel.trim() !== currentModel.trim()) {
+        submission.model = draftModel.trim() ? draftModel.trim() : "";
+      }
+      const draftPrompt = settingsDraft.thinkingPrompt ?? "";
+      const currentPrompt = settings.thinkingPrompt ?? "";
+      if (draftPrompt !== currentPrompt) {
+        submission.thinkingPrompt = draftPrompt;
+      }
+      if (settingsDraft.apiKey && settingsDraft.apiKey.trim().length > 0) {
+        submission.apiKey = settingsDraft.apiKey;
+      }
+      if (settingsDraft.clearApiKey) {
+        submission.clearApiKey = true;
+      }
+
+      await saveSettings(submission);
       await saveSettings(settingsDraft);
       setSettingsOpen(false);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to save settings");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } finally {
+      router.replace("/login");
+      router.refresh();
     }
   };
 
@@ -406,6 +446,22 @@ export function WorkspaceShell({
             <h1 className="text-lg font-semibold">{activeConversation?.title ?? "New conversation"}</h1>
             <p className="text-xs text-muted-foreground">{settingsSummary}</p>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded border px-3 py-1 text-sm"
+              onClick={() => setSettingsOpen((value) => !value)}
+            >
+              {settingsOpen ? "Close settings" : "Settings"}
+            </button>
+            <button
+              type="button"
+              className="rounded border px-3 py-1 text-sm"
+              onClick={handleLogout}
+            >
+              Log out
+            </button>
+          </div>
           <button
             type="button"
             className="rounded border px-3 py-1 text-sm"
@@ -430,6 +486,38 @@ export function WorkspaceShell({
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs uppercase text-muted-foreground">API Key</span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    className="flex-1 rounded border px-2 py-1"
+                    placeholder={settings.apiKeySet && !settingsDraft.clearApiKey ? "••••••••" : ""}
+                    value={settingsDraft.apiKey ?? ""}
+                    onChange={(event) =>
+                      setSettingsDraft((prev) => ({
+                        ...prev,
+                        apiKey: event.target.value,
+                        clearApiKey: false,
+                      }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="rounded border px-3 py-1 text-xs"
+                    onClick={() =>
+                      setSettingsDraft((prev) => ({ ...prev, apiKey: "", clearApiKey: true }))
+                    }
+                    disabled={!settings.apiKeySet}
+                  >
+                    Clear stored key
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {settings.apiKeySet
+                    ? settingsDraft.clearApiKey
+                      ? "Stored key will be removed on save."
+                      : "An API key is stored securely on the server."
+                    : "No API key stored yet."}
+                </p>
                 <input
                   type="password"
                   className="rounded border px-2 py-1"
@@ -529,6 +617,7 @@ function extractText(content: ChatMessageContent): string {
 
 function buildSettingsSummary(settings: ClientSettings): string {
   const base = settings.baseUrl?.trim() ? settings.baseUrl : "OpenAI";
+  const key = settings.apiKeySet ? "stored" : "not stored";
   const key = settings.apiKey ? "set" : "not set";
   return `Endpoint: ${base} · API key: ${key}`;
 }

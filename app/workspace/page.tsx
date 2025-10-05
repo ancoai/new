@@ -1,3 +1,14 @@
+import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import { WorkspaceShell } from "@/components/workspace-shell";
+import { fetchInitialWorkspaceData } from "@/server/workspace-data";
+import { getSessionUser } from "@/lib/auth";
+
+export default async function WorkspacePage() {
+  const user = await getSessionUser();
+  if (!user) {
+    redirect("/login");
+  }
 import { Suspense } from "react";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { fetchInitialWorkspaceData } from "@/server/workspace-data";
