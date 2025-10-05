@@ -6,6 +6,12 @@ const IV_LENGTH = 12; // AES-GCM recommended IV length
 
 function resolveSecret() {
   const secret = process.env.APP_ENCRYPTION_KEY || process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+  if (secret && secret.length >= 32) {
+    return secret;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("APP_ENCRYPTION_KEY must be set to a 32+ character secret in production environments.");
+  }
   if (secret && secret.length >= 8) {
     return secret;
   }
