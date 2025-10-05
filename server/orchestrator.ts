@@ -1,14 +1,22 @@
-import type { WorkspaceMessage } from "@/server/workspace-data";
+import type { WorkspaceMessage, WorkspaceThinkingRun } from "@/server/workspace-data";
 import { getDatabase } from "@/lib/database";
 import { fetchChatCompletion } from "@/server/platform";
 
+export type ChatMessageContent =
+  | string
+  | Array<
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } }
+    >;
+
 export type OrchestratorRequest = {
   conversationId?: string;
-  messages: Array<Pick<WorkspaceMessage, "role" | "content">>;
+  messages: Array<{ role: WorkspaceMessage["role"]; content: ChatMessageContent }>;
   settings: {
     baseUrl?: string;
     apiKey?: string;
     model: string;
+    temperature?: number;
     thinking?: {
       enabled: boolean;
       thinkingModel: string;
@@ -16,11 +24,85 @@ export type OrchestratorRequest = {
       systemPrompt?: string;
     };
   };
+  regenerateMessageId?: string;
 };
 
 export type OrchestratorResponse = {
   conversationId: string;
   message: WorkspaceMessage;
+  thinkingRun?: WorkspaceThinkingRun;
+};
+
+export type OrchestratorCallbacks = {
+  onThinkingToken?: (token: string) => void;
+  onAnswerToken?: (token: string) => void;
+  signal?: AbortSignal;
+};
+
+const DEFAULT_SYSTEM_PROMPT =
+  "You are an expert reasoning assistant. Think through the user's request in detail and provide a plan.";
+
+const DEFAULT_CONVERSATION_TITLE = "Untitled conversation";
+
+export async function orchestrateChat(
+  request: OrchestratorRequest,
+  callbacks: OrchestratorCallbacks = {},
+): Promise<OrchestratorResponse> {
+  const db = await getDatabase();
+  const finalModel = request.settings.thinking?.enabled
+    ? request.settings.thinking.answerModel
+    : request.settings.model;
+
+  const conversationId =
+    request.conversationId ?? db.createConversation(DEFAULT_CONVERSATION_TITLE, finalModel);
+
+  // persist the active model selection on the conversation record
+  db.updateConversationModel(conversationId, finalModel);
+
+  if (request.regenerateMessageId) {
+    const message = db.getMessage(request.regenerateMessageId);
+    if (message) {
+      db.deleteThinkingRunsAfter(conversationId, message.createdAt);
+      db.deleteMessagesAfter(conversationId, message.createdAt);
+    }
+  }
+
+  const latestUserMessage = [...request.messages].reverse().find((message) => message.role === "user");
+  if (!request.regenerateMessageId && latestUserMessage) {
+    const insertedId = db.insertMessage({
+      conversationId,
+      role: "user",
+      content: typeof latestUserMessage.content === "string"
+        ? latestUserMessage.content
+        : extractTextFromContent(latestUserMessage.content),
+      metadata: buildMetadata(latestUserMessage.content),
+    });
+
+    if (latestUserMessage && shouldDeriveTitle(latestUserMessage.content)) {
+      const snippet = deriveTitle(latestUserMessage.content);
+      db.updateConversationTitle(conversationId, snippet);
+    }
+
+    // ensure metadata stored for structured content (e.g., image attachments)
+    if (Array.isArray(latestUserMessage.content)) {
+      db.updateMessageMetadata(insertedId, buildMetadata(latestUserMessage.content));
+    }
+  }
+
+  let thinkingOutput: string | null = null;
+  let thinkingRunId: string | null = null;
+  let lastThinkingCreatedAt: string | null = null;
+
+  const thinkingConfig = request.settings.thinking;
+  if (thinkingConfig?.enabled) {
+    const thinkingPrompt = thinkingConfig.systemPrompt?.trim().length
+      ? thinkingConfig.systemPrompt
+      : DEFAULT_SYSTEM_PROMPT;
+
+    const thinkingResponse = await fetchChatCompletion({
+      baseUrl: request.settings.baseUrl,
+      apiKey: request.settings.apiKey,
+      model: thinkingConfig.thinkingModel,
   thinkingRun?: {
     modelId: string;
     output: string;
@@ -58,21 +140,30 @@ export async function orchestrateChat(
         { role: "system", content: thinkingPrompt },
         ...request.messages,
       ],
+      temperature: request.settings.temperature,
+      onToken: callbacks.onThinkingToken,
+      signal: callbacks.signal,
     });
+
     thinkingOutput = thinkingResponse.content;
-    db.insertThinkingRun({
+    const thinkingCreatedAt = new Date().toISOString();
+    thinkingRunId = db.insertThinkingRun({
       conversationId,
-      modelId: request.settings.thinking.thinkingModel,
+      modelId: thinkingConfig.thinkingModel,
       output: thinkingOutput,
+      systemPrompt: thinkingPrompt,
+      createdAt: thinkingCreatedAt,
     });
+    lastThinkingCreatedAt = thinkingCreatedAt;
   }
 
-  const answerMessages = request.settings.thinking?.enabled && thinkingOutput
-    ? [
-        ...request.messages,
-        { role: "system", content: `Prior thinking:\n${thinkingOutput}` },
-      ]
-    : request.messages;
+  const answerMessages =
+    thinkingConfig?.enabled && thinkingOutput
+      ? [
+          ...request.messages,
+          { role: "system", content: `Prior thinking:\n${thinkingOutput}` },
+        ]
+      : request.messages;
 
   const completion = await fetchChatCompletion({
     baseUrl: request.settings.baseUrl,

@@ -6,27 +6,25 @@ export default function HomePage() {
       <header className="space-y-2 text-center">
         <h1 className="text-3xl font-bold">Thinking Chat</h1>
         <p className="text-muted-foreground">
-          A Next.js starter for a multi-model chat client with optional thinking
-          pipeline.
+          Multi-model chat workspace with optional thinking pipeline, model
+          management, and streaming UX.
         </p>
       </header>
 
       <section className="rounded-lg border p-6">
-        <h2 className="text-xl font-semibold">Getting Started</h2>
+        <h2 className="text-xl font-semibold">Quick Start</h2>
         <ol className="mt-4 list-decimal space-y-2 pl-4 text-left">
-          <li>Configure your API key and base URL in the Settings panel.</li>
+          <li>Open the workspace and configure your API key/base URL.</li>
+          <li>Create a conversation or pick an existing one from the sidebar.</li>
           <li>
-            Create a conversation from the sidebar and pick your primary model.
-          </li>
-          <li>
-            (Optional) Enable the thinking pipeline by choosing a thinking model
-            and answer model.
+            Toggle the thinking pipeline, select models, and start chatting with
+            streaming responses and regenerate controls.
           </li>
         </ol>
         <p className="mt-4 text-sm text-muted-foreground">
-          The full chat workspace is under construction. Visit the
+          Head directly to the
           <Link className="ml-1 text-blue-600 underline" href="/workspace">
-            workspace preview
+            chat workspace
           </Link>
           .
         </p>

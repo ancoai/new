@@ -14,6 +14,7 @@ export type WorkspaceMessage = {
   role: "user" | "assistant" | "system" | "tool";
   content: string;
   createdAt: string;
+  metadata: Record<string, unknown> | null;
 };
 
 export type WorkspaceConversation = {
@@ -32,6 +33,7 @@ export type WorkspaceThinkingRun = {
   modelId: string;
   output: string;
   createdAt: string;
+  messageId: string | null;
 };
 
 export type InitialWorkspaceData = {
