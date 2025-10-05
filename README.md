@@ -15,6 +15,9 @@ A Next.js + TypeScript workspace for building a multi-model chat client inspired
 - **Image captioning** – upload an image to request a concise title using any multimodal-capable model.
 - **Authentication** – the workspace is protected by a built-in admin account (`admin` / `12345678`) with cookie-backed sessions stored in SQLite.
 - **Encrypted secrets** – API keys are encrypted at rest via AES-256-GCM using the `APP_ENCRYPTION_KEY` secret.
+  - Settings panel for configuring API base URL, API key, default model, and default thinking prompt (stored client-side).
+- **Model management** – sync available models from any OpenAI-compatible endpoint and add custom model IDs manually.
+- **Image captioning** – upload an image to request a concise title using any multimodal-capable model.
 
 ## Getting Started
 
@@ -22,6 +25,21 @@ A Next.js + TypeScript workspace for building a multi-model chat client inspired
 
    ```bash
    npm install
+A Next.js + TypeScript starter implementing the foundations for a multi-model chat client inspired by NextChat/LobeChat with an optional thinking pipeline.
+
+## Features
+
+- Server components backed by SQLite (via `better-sqlite3`) with tables for models, conversations, messages, and thinking runs.
+- API routes for managing models, conversations, settings, and orchestrating thinking + answering model flows.
+- React client workspace with sidebar, message viewer, composer, and thinking trace preview.
+- Extensible architecture for OpenAI-compatible endpoints with customizable base URLs and API keys.
+
+## Getting Started
+
+1. Install dependencies
+
+   ```bash
+   pnpm install
    ```
 
 2. Launch the dev server:
@@ -35,6 +53,10 @@ A Next.js + TypeScript workspace for building a multi-model chat client inspired
 ### Required environment variables
 
 - `APP_ENCRYPTION_KEY` – 32+ character secret used to derive the AES-256-GCM key that protects stored API credentials. Development falls back to `development-secret`, but production deployments must override it.
+   pnpm dev
+   ```
+
+3. Visit `http://localhost:3000/workspace` to access the chat workspace. Configure your API key/base URL from the Settings button before sending messages.
 
 ## Tech Notes
 
@@ -89,3 +111,13 @@ The repository includes a `vercel.json` manifest for one-click deployments. Conf
 > After the secret exists you can reference it from the environment variable field with `@app_encryption_key` during deployment.
 
 Because SQLite is file-based, attach a persistent volume or migrate to a hosted database when running in multi-instance environments.
+The repository includes a `vercel.json` manifest for one-click deployments. Configure the following environment variable in the Vercel dashboard (or via `vercel secrets add app_encryption_key <value>`) before deploying:
+
+- `APP_ENCRYPTION_KEY`
+
+Because SQLite is file-based, attach a persistent volume or migrate to a hosted database when running in multi-instance environments.
+## Future Improvements
+
+- Add authentication/encryption for persisted API keys.
+- Expand automated test coverage (unit + integration) for orchestrator and UI flows.
+- Package the workspace into a deployable Docker/Vercel setup.

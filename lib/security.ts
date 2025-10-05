@@ -12,6 +12,9 @@ function resolveSecret() {
   if (process.env.NODE_ENV === "production") {
     throw new Error("APP_ENCRYPTION_KEY must be set to a 32+ character secret in production environments.");
   }
+  if (secret && secret.length >= 8) {
+    return secret;
+  }
   // Fallback for local development; callers should ensure a strong secret in production deployments.
   return "development-secret";
 }

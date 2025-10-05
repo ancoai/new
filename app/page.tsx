@@ -27,6 +27,7 @@ export default function HomePage() {
             login page
           </Link>
           and then open the
+          Head directly to the
           <Link className="ml-1 text-blue-600 underline" href="/workspace">
             chat workspace
           </Link>

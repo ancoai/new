@@ -9,6 +9,11 @@ export default async function WorkspacePage() {
   if (!user) {
     redirect("/login");
   }
+import { Suspense } from "react";
+import { WorkspaceShell } from "@/components/workspace-shell";
+import { fetchInitialWorkspaceData } from "@/server/workspace-data";
+
+export default async function WorkspacePage() {
   const data = await fetchInitialWorkspaceData();
 
   return (
