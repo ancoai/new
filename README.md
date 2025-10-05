@@ -17,6 +17,18 @@ A Next.js + TypeScript workspace for building a multi-model chat client inspired
 ## Getting Started
 
 1. Install dependencies:
+A Next.js + TypeScript starter implementing the foundations for a multi-model chat client inspired by NextChat/LobeChat with an optional thinking pipeline.
+
+## Features
+
+- Server components backed by SQLite (via `better-sqlite3`) with tables for models, conversations, messages, and thinking runs.
+- API routes for managing models, conversations, settings, and orchestrating thinking + answering model flows.
+- React client workspace with sidebar, message viewer, composer, and thinking trace preview.
+- Extensible architecture for OpenAI-compatible endpoints with customizable base URLs and API keys.
+
+## Getting Started
+
+1. Install dependencies
 
    ```bash
    pnpm install
