@@ -1,4 +1,8 @@
 {
   "version": 2,
   "builds": [{ "src": "next.config.mjs", "use": "@vercel/next" }]
+  "builds": [{ "src": "next.config.mjs", "use": "@vercel/next" }],
+  "env": {
+    "APP_ENCRYPTION_KEY": "@app_encryption_key"
+  }
 }

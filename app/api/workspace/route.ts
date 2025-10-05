@@ -6,6 +6,8 @@ export async function GET() {
   if (!user) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+export async function GET() {
   const data = await fetchInitialWorkspaceData();
   return Response.json(data);
 }

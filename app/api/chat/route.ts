@@ -68,6 +68,8 @@ export async function POST(request: NextRequest) {
       apiKey: userSettings.apiKey,
     },
   };
+  const json = await request.json();
+  const body = requestSchema.parse(json);
   const encoder = new TextEncoder();
   const abortController = new AbortController();
 
@@ -86,6 +88,7 @@ export async function POST(request: NextRequest) {
       try {
         send("status", { stage: "starting" });
         const result = await orchestrateChat(payload, {
+        const result = await orchestrateChat(body, {
           onThinkingToken: (token) => {
             if (token.trim().length > 0) {
               send("thinking_delta", { delta: token });
