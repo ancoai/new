@@ -19,6 +19,7 @@ type ConversationRow = {
   model_id: string;
   created_at: string;
   updated_at: string;
+  model_label: string | null;
 };
 
 type MessageRow = {
@@ -121,6 +122,7 @@ function mapConversationRow(
     id: row.id,
     title: row.title,
     modelId: row.model_id,
+    modelLabel: row.model_label ?? row.model_id,
     modelLabel: row.model_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -179,6 +181,10 @@ export async function getDatabase() {
     listConversations(): WorkspaceConversation[] {
       const conversations = db
         .prepare(
+          `SELECT c.id, c.title, c.model_id, c.created_at, c.updated_at, m.display_name AS model_label
+           FROM conversations c
+           LEFT JOIN models m ON m.id = c.model_id
+           ORDER BY c.updated_at DESC`,
           `SELECT id, title, model_id, created_at, updated_at FROM conversations ORDER BY updated_at DESC`,
         )
         .all() as ConversationRow[];
@@ -263,6 +269,11 @@ export async function getDatabase() {
     getConversation(conversationId: string): WorkspaceConversation | null {
       const row = db
         .prepare(
+          `SELECT c.id, c.title, c.model_id, c.created_at, c.updated_at, m.display_name AS model_label
+           FROM conversations c
+           LEFT JOIN models m ON m.id = c.model_id
+           WHERE c.id = @conversationId
+           LIMIT 1`,
           `SELECT id, title, model_id, created_at, updated_at FROM conversations WHERE id = @conversationId LIMIT 1`,
         )
         .get({ conversationId }) as ConversationRow | undefined;

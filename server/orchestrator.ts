@@ -168,6 +168,11 @@ export async function orchestrateChat(
   const completion = await fetchChatCompletion({
     baseUrl: request.settings.baseUrl,
     apiKey: request.settings.apiKey,
+    model: finalModel,
+    messages: answerMessages,
+    temperature: request.settings.temperature,
+    onToken: callbacks.onAnswerToken,
+    signal: callbacks.signal,
     model: request.settings.thinking?.enabled
       ? request.settings.thinking.answerModel
       : request.settings.model,
@@ -179,6 +184,82 @@ export async function orchestrateChat(
     conversationId,
     role: "assistant",
     content: completion.content,
+    metadata: null,
+    createdAt,
+  });
+
+  if (thinkingRunId) {
+    db.updateThinkingRunMessage(thinkingRunId, messageId);
+  }
+
+  const message: WorkspaceMessage = {
+    id: messageId,
+    conversationId,
+    role: "assistant",
+    content: completion.content,
+    createdAt,
+    metadata: null,
+  };
+
+  const thinkingRun: WorkspaceThinkingRun | undefined = thinkingRunId
+    ? {
+        id: thinkingRunId,
+        conversationId,
+        modelId: thinkingConfig!.thinkingModel,
+        output: thinkingOutput ?? "",
+        createdAt: lastThinkingCreatedAt ?? createdAt,
+        messageId,
+      }
+    : undefined;
+
+  return {
+    conversationId,
+    message,
+    thinkingRun,
+  };
+}
+
+function extractTextFromContent(content: ChatMessageContent): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((item) => {
+      if (item.type === "text") {
+        return item.text;
+      }
+      if (item.type === "image_url") {
+        return "[Image]";
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildMetadata(content: ChatMessageContent): Record<string, unknown> | null {
+  if (typeof content === "string") return null;
+  const attachments = content
+    .filter((item): item is { type: "image_url"; image_url: { url: string; detail?: string } } => item.type === "image_url")
+    .map((item) => item.image_url);
+  if (attachments.length === 0) {
+    return null;
+  }
+  return { attachments };
+}
+
+function shouldDeriveTitle(content: ChatMessageContent): boolean {
+  if (typeof content === "string") {
+    return content.trim().length > 0;
+  }
+  return content.some((item) => (item.type === "text" ? item.text.trim().length > 0 : false));
+}
+
+function deriveTitle(content: ChatMessageContent): string {
+  const text = extractTextFromContent(content).replace(/\s+/g, " ").trim();
+  if (!text) {
+    return DEFAULT_CONVERSATION_TITLE;
+  }
+  return text.length > 80 ? `${text.slice(0, 77)}...` : text;
+}
     createdAt,
   });
 
