@@ -93,6 +93,24 @@ npm test
 
 ### Vercel
 
+The repository includes a `vercel.json` manifest for one-click deployments. Configure the following environment variable in the Vercel dashboard (or via `vercel env add APP_ENCRYPTION_KEY production` and repeating for other environments) before deploying:
+
+- `APP_ENCRYPTION_KEY` – 32+ character secret used for encrypting stored API credentials. One-click deploys prompt for the value automatically; you can generate a strong secret locally with `openssl rand -base64 48`.
+
+> **Vercel secret tip**
+>
+> If the dashboard shows “Environment Variable `APP_ENCRYPTION_KEY` references Secret `app_encryption_key`, which does not exist,” either enter the secret value directly in the form (without the leading `@`), or create the secret ahead of time:
+>
+> ```bash
+> vercel secrets add app_encryption_key "$(openssl rand -base64 48)"
+> vercel env add APP_ENCRYPTION_KEY production @app_encryption_key
+> vercel env add APP_ENCRYPTION_KEY preview @app_encryption_key
+> vercel env add APP_ENCRYPTION_KEY development @app_encryption_key
+> ```
+>
+> After the secret exists you can reference it from the environment variable field with `@app_encryption_key` during deployment.
+
+Because SQLite is file-based, attach a persistent volume or migrate to a hosted database when running in multi-instance environments.
 The repository includes a `vercel.json` manifest for one-click deployments. Configure the following environment variable in the Vercel dashboard (or via `vercel secrets add app_encryption_key <value>`) before deploying:
 
 - `APP_ENCRYPTION_KEY`
