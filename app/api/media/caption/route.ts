@@ -10,6 +10,7 @@ const requestSchema = z.object({
   prompt: z.string().optional(),
   settings: z.object({
     baseUrl: z.string().url().optional(),
+    apiKey: z.string().optional(),
     model: z.string(),
   }),
 });
@@ -26,6 +27,8 @@ export async function POST(request: NextRequest) {
   if (!settings.apiKey) {
     return Response.json({ error: "Missing API key" }, { status: 400 });
   }
+  const json = await request.json();
+  const body = requestSchema.parse(json);
 
   const promptText = body.prompt?.trim();
   const prompt =
@@ -36,6 +39,8 @@ export async function POST(request: NextRequest) {
   const content = await fetchChatCompletion({
     baseUrl: body.settings.baseUrl ?? settings.baseUrl ?? undefined,
     apiKey: settings.apiKey,
+    baseUrl: body.settings.baseUrl,
+    apiKey: body.settings.apiKey,
     model: body.settings.model,
     messages: [
       {

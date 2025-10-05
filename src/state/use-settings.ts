@@ -9,6 +9,9 @@ export type ClientSettings = {
   apiKey?: string;
   apiKeySet?: boolean;
   clearApiKey?: boolean;
+  apiKey?: string;
+  model?: string;
+  thinkingPrompt?: string;
 };
 
 async function fetchSettings(): Promise<ClientSettings> {
@@ -58,6 +61,23 @@ async function updateSettings(payload: ClientSettings): Promise<ClientSettings> 
     apiKey: "",
     clearApiKey: false,
   };
+    throw new Error("Failed to load settings");
+  }
+  const data = (await response.json()) as { settings: ClientSettings };
+  return data.settings ?? {};
+}
+
+async function updateSettings(payload: ClientSettings): Promise<ClientSettings> {
+  const response = await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error("Failed to save settings");
+  }
+  const data = (await response.json()) as { settings: ClientSettings };
+  return data.settings ?? {};
 }
 
 export function useSettings() {

@@ -206,10 +206,12 @@ export function WorkspaceShell({
   const refreshModelsMutation = useMutation({
     mutationFn: async () => {
       if (!settings.apiKeySet) {
+      if (!settings.apiKey) {
         throw new Error("API key required to sync models");
       }
       const params = new URLSearchParams({ refresh: "1" });
       if (settings.baseUrl) params.set("baseUrl", settings.baseUrl);
+      params.set("apiKey", settings.apiKey);
       const response = await fetch(`/api/models?${params.toString()}`);
       if (!response.ok) {
         throw new Error("Failed to refresh models");
@@ -224,6 +226,7 @@ export function WorkspaceShell({
   const captionImageMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!settings.apiKeySet) {
+      if (!settings.apiKey) {
         throw new Error("API key required for image captioning");
       }
       const base64 = await readFileAsBase64(file);
@@ -235,6 +238,7 @@ export function WorkspaceShell({
           mimeType: file.type,
           settings: {
             baseUrl: settings.baseUrl,
+            apiKey: settings.apiKey,
             model: composerConfig.thinkingEnabled ? composerConfig.thinkingModelId : composerConfig.modelId,
           },
         }),
@@ -282,6 +286,7 @@ export function WorkspaceShell({
         messages: chatMessages,
         settings: {
           baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
           model: composerConfig.modelId,
           temperature: composerConfig.temperature,
           thinking: composerConfig.thinkingEnabled
@@ -315,6 +320,7 @@ export function WorkspaceShell({
         messages: history,
         settings: {
           baseUrl: settings.baseUrl,
+          apiKey: settings.apiKey,
           model: composerConfig.modelId,
           temperature: composerConfig.temperature,
           thinking: composerConfig.thinkingEnabled
@@ -396,6 +402,7 @@ export function WorkspaceShell({
       }
 
       await saveSettings(submission);
+      await saveSettings(settingsDraft);
       setSettingsOpen(false);
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to save settings");
@@ -455,6 +462,13 @@ export function WorkspaceShell({
               Log out
             </button>
           </div>
+          <button
+            type="button"
+            className="rounded border px-3 py-1 text-sm"
+            onClick={() => setSettingsOpen((value) => !value)}
+          >
+            {settingsOpen ? "Close settings" : "Settings"}
+          </button>
         </header>
 
         {settingsOpen && (
@@ -504,6 +518,12 @@ export function WorkspaceShell({
                       : "An API key is stored securely on the server."
                     : "No API key stored yet."}
                 </p>
+                <input
+                  type="password"
+                  className="rounded border px-2 py-1"
+                  value={settingsDraft.apiKey ?? ""}
+                  onChange={(event) => setSettingsDraft((prev) => ({ ...prev, apiKey: event.target.value }))}
+                />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-xs uppercase text-muted-foreground">Default Model</span>
@@ -598,6 +618,7 @@ function extractText(content: ChatMessageContent): string {
 function buildSettingsSummary(settings: ClientSettings): string {
   const base = settings.baseUrl?.trim() ? settings.baseUrl : "OpenAI";
   const key = settings.apiKeySet ? "stored" : "not stored";
+  const key = settings.apiKey ? "set" : "not set";
   return `Endpoint: ${base} · API key: ${key}`;
 }
 
