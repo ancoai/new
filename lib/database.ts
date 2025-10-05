@@ -123,6 +123,7 @@ function mapConversationRow(
     title: row.title,
     modelId: row.model_id,
     modelLabel: row.model_label ?? row.model_id,
+    modelLabel: row.model_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     messages,
@@ -184,6 +185,7 @@ export async function getDatabase() {
            FROM conversations c
            LEFT JOIN models m ON m.id = c.model_id
            ORDER BY c.updated_at DESC`,
+          `SELECT id, title, model_id, created_at, updated_at FROM conversations ORDER BY updated_at DESC`,
         )
         .all() as ConversationRow[];
 
@@ -272,6 +274,7 @@ export async function getDatabase() {
            LEFT JOIN models m ON m.id = c.model_id
            WHERE c.id = @conversationId
            LIMIT 1`,
+          `SELECT id, title, model_id, created_at, updated_at FROM conversations WHERE id = @conversationId LIMIT 1`,
         )
         .get({ conversationId }) as ConversationRow | undefined;
       if (!row) {
@@ -356,6 +359,8 @@ export async function getDatabase() {
         `DELETE FROM thinking_runs WHERE conversation_id = @conversationId AND created_at >= @createdAt`,
       ).run({ conversationId, createdAt });
     },
+  };
+
   };
 }
 

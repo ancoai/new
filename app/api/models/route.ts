@@ -3,6 +3,9 @@ import { z } from "zod";
 import { getModelStore } from "@/lib/model-store";
 import { getDatabase } from "@/lib/database";
 import { fetchAvailableModels } from "@/server/platform";
+import { getModelStore } from "@/lib/model-store";
+import { getDatabase } from "@/lib/database";
+import { z } from "zod";
 
 const addModelSchema = z.object({
   id: z.string().min(1),
@@ -24,6 +27,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+export async function GET() {
   const store = await getModelStore();
   const models = store.listModels();
   return Response.json({ models });
