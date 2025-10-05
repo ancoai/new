@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+.data
+.env*
+*.log
+data/app.db
